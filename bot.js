@@ -1,12 +1,13 @@
 /*  ================================
         Telegram Subscription Bot
-        Full Version with JSON Database Tracking
+        Full Version with SQLite DB
         Stars Workflow + Offers 24h Auto
         Vodafone Cash Number: 01009446202
     ================================ */
 
 const { Telegraf, Markup } = require("telegraf");
-const fs = require("fs");
+const sqlite3 = require("sqlite3").verbose();
+const path = require("path");
 require("dotenv").config();
 
 const bot = new Telegraf(process.env.BOT_TOKEN);
@@ -23,17 +24,46 @@ const starsUser = "@remaigofvfkvro547gv";
 const finalLink = "https://x.com/JDjdbhk82977";
 
 // -------------------- Offer Configuration --------------------
-let offerActive = true; // true يعني العرض شغال
+let offerActive = true; // true = العرض شغال
 const offerDurationMs = 24 * 60 * 60 * 1000; // 24 ساعة
 const offerPrices = { stars: 100, egp: 100, usd: 1 };
 const offerDuration = "6"; // 6 شهور فقط خلال العرض
 
-// -------------------- JSON Database --------------------
-const DB_FILE = "./db.json";
-function readDB() { try { if (!fs.existsSync(DB_FILE)) fs.writeFileSync(DB_FILE, "{}"); return JSON.parse(fs.readFileSync(DB_FILE, "utf8")); } catch (err) { console.error("Error reading DB:", err); return {}; } }
-function writeDB(db) { fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2)); }
-function saveUser(userId, data) { const db = readDB(); db[userId] = { ...(db[userId] || {}), ...data }; writeDB(db); }
-function updateUserStatus(userId, status) { const db = readDB(); if (!db[userId]) db[userId] = {}; db[userId].status = status; db[userId].timestamp = new Date().toISOString(); writeDB(db); }
+// -------------------- SQLite Database --------------------
+const DB_FILE = path.join(__dirname, "bot.db");
+const db = new sqlite3.Database(DB_FILE);
+
+db.serialize(() => {
+    db.run(`CREATE TABLE IF NOT EXISTS users (
+        userId INTEGER PRIMARY KEY,
+        username TEXT,
+        type TEXT,
+        duration TEXT,
+        method TEXT,
+        expectedAmount INTEGER,
+        sentAmount INTEGER,
+        screenshot TEXT,
+        status TEXT,
+        isOffer INTEGER,
+        timestamp TEXT
+    )`);
+});
+
+// -------------------- DB Helper Functions --------------------
+function saveUser(user) {
+    db.run(`INSERT OR REPLACE INTO users (userId, username, type, duration, method, expectedAmount, sentAmount, screenshot, status, isOffer, timestamp)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+            user.userId, user.username || null, user.type || null, user.duration || null, user.method || null,
+            user.expectedAmount || null, user.sentAmount || null, user.screenshot || null, user.status || null,
+            user.isOffer ? 1 : 0, new Date().toISOString()
+        ]);
+}
+
+function updateUserStatus(userId, status, extra = {}) {
+    db.run(`UPDATE users SET status = ?, timestamp = ?, sentAmount = COALESCE(?, sentAmount), screenshot = COALESCE(?, screenshot) WHERE userId = ?`,
+        [status, new Date().toISOString(), extra.sentAmount || null, extra.screenshot || null, userId]);
+}
 
 // -------------------- Sessions --------------------
 let sessions = {};
@@ -64,11 +94,10 @@ bot.action("group_sub", (ctx) => {
     const id = ctx.from.id;
     const session = getSession(id);
     session.type = "group";
-    saveUser(id, { userId: id, username: ctx.from.username, type: "group" });
+    saveUser({ userId: id, username: ctx.from.username, type: "group" });
 
     let buttons = [];
     if (offerActive) {
-        // خلال العرض: مدة 6 شهور فقط
         buttons = [[Markup.button.callback("6 شهور (عرض خاص!)", "group_offer")]];
     } else {
         buttons = [
@@ -92,7 +121,7 @@ bot.action("group_offer", (ctx) => {
     const session = getSession(id);
     session.duration = offerDuration;
     session.isOffer = true;
-    saveUser(id, { duration: offerDuration, isOffer: true });
+    saveUser({ userId: id, duration: offerDuration, isOffer: true });
 
     return ctx.editMessageText(
         `🔥 عرض خاص لمدة 24 ساعة 🔥\nمدة الاشتراك: 6 شهور\nالسعر:\n⭐ ${offerPrices.stars} ⭐\n💵 ${offerPrices.egp} جنيه\n💲 ${offerPrices.usd} دولار\n\nاختر طريقة الدفع:`,
@@ -109,7 +138,7 @@ bot.action("group_offer", (ctx) => {
         const id = ctx.from.id;
         const session = getSession(id);
         session.duration = m;
-        saveUser(id, { duration: m });
+        saveUser({ userId: id, duration: m });
         return ctx.editMessageText(
             `مدة الاشتراك: ${m} شهر\n\nاختر طريقة الدفع:`,
             Markup.inlineKeyboard([
@@ -126,7 +155,7 @@ bot.action("pay_stars", (ctx) => {
     const s = getSession(id);
     let amount = s.type === "group" ? prices.group[s.duration].stars : prices.live.stars;
     s.expectedAmount = amount;
-    saveUser(id, { method: "stars", expectedAmount: amount, status: "awaiting_click" });
+    saveUser({ userId: id, method: "stars", expectedAmount: amount, status: "awaiting_click" });
 
     return ctx.editMessageText(
         `⭐ **الدفع عبر الاستارز**
@@ -146,7 +175,7 @@ bot.action("pay_stars_offer", (ctx) => {
     const s = getSession(id);
     s.expectedAmount = offerPrices.stars;
     s.isOffer = true;
-    saveUser(id, { method: "stars", expectedAmount: offerPrices.stars, isOffer: true, status: "awaiting_click" });
+    saveUser({ userId: id, method: "stars", expectedAmount: offerPrices.stars, isOffer: true, status: "awaiting_click" });
 
     return ctx.editMessageText(
         `⭐ **عرض خاص - الدفع عبر الاستارز**\n\nالرجاء تحويل الاستارز على الجروب: ${starsUser}\n⚠️ أرسل 100 ⭐ في كل مرة على دفعات حتى تكتمل الـ ${offerPrices.stars} ⭐.\n\nبعد ذلك اضغط على الزر بالأسفل عند الانتهاء من التحويل.`,
@@ -168,7 +197,7 @@ bot.action("pay_voda", (ctx) => {
     const s = getSession(id);
     let egp = s.type === "group" ? prices.group[s.duration].egp : prices.live.egp;
     s.expectedAmount = egp;
-    saveUser(id, { method: "vodafone", expectedAmount: egp, status: "awaiting_amount" });
+    saveUser({ userId: id, method: "vodafone", expectedAmount: egp, status: "awaiting_amount" });
 
     return ctx.editMessageText(
 `💵 **الدفع عبر فودافون كاش**
@@ -187,7 +216,7 @@ bot.action("pay_voda_offer", (ctx) => {
     const s = getSession(id);
     s.expectedAmount = offerPrices.egp;
     s.isOffer = true;
-    saveUser(id, { method: "vodafone", expectedAmount: offerPrices.egp, isOffer: true, status: "awaiting_amount" });
+    saveUser({ userId: id, method: "vodafone", expectedAmount: offerPrices.egp, isOffer: true, status: "awaiting_amount" });
 
     return ctx.editMessageText(
 `💵 **عرض خاص - الدفع عبر فودافون كاش**
@@ -220,14 +249,13 @@ bot.on("text", (ctx) => {
     let expected = s.isOffer ? (s.method === "stars" ? offerPrices.stars : offerPrices.egp) : s.expectedAmount;
 
     if (input !== expected) {
-        updateUserStatus(id, "wrong_amount");
+        updateUserStatus(id, "wrong_amount", { sentAmount: input });
         return ctx.reply(`المبلغ/عدد الذي أرسلته غير مطابق. الرجاء إرسال العدد الصحيح: ${expected}`);
     }
 
     s.waitingForAmount = false;
     s.waitingForScreenshot = true;
-    updateUserStatus(id, "awaiting_screenshot");
-    saveUser(id, { sentAmount: input });
+    updateUserStatus(id, "awaiting_screenshot", { sentAmount: input });
 
     return ctx.reply("✅ تم التحقق من العدد/المبلغ بنجاح، الآن من فضلك أرسل اسكرين عملية الدفع.");
 });
@@ -240,8 +268,7 @@ bot.on("photo", async (ctx) => {
     if (!s.waitingForScreenshot) return;
 
     s.waitingForScreenshot = false;
-    updateUserStatus(id, "verified");
-    saveUser(id, { screenshot: ctx.message.photo[0].file_id });
+    updateUserStatus(id, "verified", { screenshot: ctx.message.photo[0].file_id });
 
     await ctx.reply("جاري التحقق من الاسكرين… ⏳");
     await ctx.reply(`تم استلام الاسكرين وسيتم التفعيل خلال دقائق ✅\nتفضل الجروب الخاص: ${finalLink}\nشكرًا للاشتراك معنا!`);
@@ -252,7 +279,7 @@ bot.action("live_sub", (ctx) => {
     const id = ctx.from.id;
     const s = getSession(id);
     s.type = "live";
-    saveUser(id, { userId: id, username: ctx.from.username, type: "live" });
+    saveUser({ userId: id, username: ctx.from.username, type: "live" });
 
     return ctx.editMessageText(
         "سعر الايف الواحد:\n\n⭐ 2000 استار\n💵 700 جنيه مصري\n💲 20 دولار\n\nاختر طريقة الدفع:",
