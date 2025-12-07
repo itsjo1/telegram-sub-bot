@@ -1,7 +1,8 @@
 /*  ================================
         Telegram Subscription Bot
         Full Version with JSON Database Tracking
-        Vodafone Cash Number Updated
+        Stars Workflow Updated
+        Vodafone Cash Number: 01009446202
     ================================ */
 
 const { Telegraf, Markup } = require("telegraf");
@@ -12,61 +13,25 @@ const bot = new Telegraf(process.env.BOT_TOKEN);
 
 // -------------------- Prices --------------------
 const prices = {
-    group: {
-        "1": { stars: 200, egp: 70 },
-        "6": { stars: 400, egp: 350 },
-        "12": { stars: 1500, egp: 600 }
-    },
-    live: {
-        stars: 2000,
-        egp: 700,
-        usd: 20
-    }
+    group: { "1": { stars: 200, egp: 70 }, "6": { stars: 400, egp: 350 }, "12": { stars: 1500, egp: 600 } },
+    live: { stars: 2000, egp: 700, usd: 20 }
 };
 
-const vodafoneNumber = "01009446202"; // الرقم الجديد
+const vodafoneNumber = "01009446202";
 const supportLink = "https://t.me/remaigofvfkvro547gv";
 const starsUser = "@remaigofvfkvro547gv";
 const finalLink = "https://x.com/JDjdbhk82977";
 
 // -------------------- JSON Database --------------------
 const DB_FILE = "./db.json";
-
-function readDB() {
-    try {
-        if (!fs.existsSync(DB_FILE)) fs.writeFileSync(DB_FILE, "{}");
-        const data = fs.readFileSync(DB_FILE, "utf8");
-        return JSON.parse(data);
-    } catch (err) {
-        console.error("Error reading DB:", err);
-        return {};
-    }
-}
-
-function writeDB(db) {
-    fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2));
-}
-
-function saveUser(userId, data) {
-    const db = readDB();
-    db[userId] = { ...(db[userId] || {}), ...data };
-    writeDB(db);
-}
-
-function updateUserStatus(userId, status) {
-    const db = readDB();
-    if (!db[userId]) db[userId] = {};
-    db[userId].status = status;
-    db[userId].timestamp = new Date().toISOString();
-    writeDB(db);
-}
+function readDB() { try { if (!fs.existsSync(DB_FILE)) fs.writeFileSync(DB_FILE, "{}"); return JSON.parse(fs.readFileSync(DB_FILE, "utf8")); } catch (err) { console.error("Error reading DB:", err); return {}; } }
+function writeDB(db) { fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2)); }
+function saveUser(userId, data) { const db = readDB(); db[userId] = { ...(db[userId] || {}), ...data }; writeDB(db); }
+function updateUserStatus(userId, status) { const db = readDB(); if (!db[userId]) db[userId] = {}; db[userId].status = status; db[userId].timestamp = new Date().toISOString(); writeDB(db); }
 
 // -------------------- Sessions --------------------
 let sessions = {};
-function getSession(id) {
-    if (!sessions[id]) sessions[id] = {};
-    return sessions[id];
-}
+function getSession(id) { if (!sessions[id]) sessions[id] = {}; return sessions[id]; }
 
 // -------------------- Start --------------------
 bot.start((ctx) => {
@@ -85,8 +50,7 @@ bot.start((ctx) => {
 bot.action("support", (ctx) => {
     return ctx.editMessageText(
         `من فضلك تواصل مع الدعم على الجروب التالي:\n${supportLink}\n\nسيتم الرد عليك في أسرع وقت ممكن.`,
-        Markup.inlineKeyboard([[Markup.button.url("فتح جروب الدعم", supportLink)]])
-    );
+        Markup.inlineKeyboard([[Markup.button.url("فتح جروب الدعم", supportLink)]]));
 });
 
 // -------------------- Group Subscription --------------------
@@ -125,26 +89,37 @@ bot.action("group_sub", (ctx) => {
     });
 });
 
-// -------------------- Pay with Stars --------------------
+// -------------------- Stars Payment --------------------
 bot.action("pay_stars", (ctx) => {
     const id = ctx.from.id;
     const s = getSession(id);
 
     let amount = s.type === "group" ? prices.group[s.duration].stars : prices.live.stars;
     s.expectedAmount = amount;
-    saveUser(id, { method: "stars", expectedAmount: amount, status: "awaiting_amount" });
+    saveUser(id, { method: "stars", expectedAmount: amount, status: "awaiting_click" });
 
     return ctx.editMessageText(
         `⭐ **الدفع عبر الاستارز**
 
+الرجاء تحويل الاستارز على الجروب: ${starsUser}  
+لو مش عارف كيف، ادخل الجروب، ستجد صندوق هدايا أسفل اليمين أو اليسار، اضغط عليه وأرسل الهدية، ثم خذ اسكرين.
+
 السعر المطلوب: **${amount} ⭐**
 
-من فضلك أولاً أرسل العدد الذي قمت بتحويله بالضبط، ثم سيتم طلب إرسال الاسكرين.`,
-        Markup.inlineKeyboard([[Markup.button.callback("📤 أرسل العدد أولاً", "send_amount_stars")]])
-    );
+بعد ذلك اضغط على الزر بالأسفل عند الانتهاء من التحويل.`,
+        Markup.inlineKeyboard([[Markup.button.callback("✅ تم التحويل أولاً", "click_done")]]));
 });
 
-// -------------------- Pay with Vodafone Cash --------------------
+// -------------------- Click Done for Stars --------------------
+bot.action("click_done", (ctx) => {
+    const id = ctx.from.id;
+    const s = getSession(id);
+    s.waitingForAmount = "stars";
+    updateUserStatus(id, "awaiting_amount");
+    return ctx.reply(`الآن من فضلك أرسل عدد الاستارز الذي قمت بتحويله بالضبط:`);
+});
+
+// -------------------- Vodafone Cash Payment --------------------
 bot.action("pay_voda", (ctx) => {
     const id = ctx.from.id;
     const s = getSession(id);
@@ -161,21 +136,10 @@ bot.action("pay_voda", (ctx) => {
 من فضلك أولاً أرسل المبلغ الذي قمت بتحويله بالضبط، ثم سيتم طلب إرسال الاسكرين.
 
 رقم التحويل: 📱 ${vodafoneNumber}`,
-        Markup.inlineKeyboard([
-            [Markup.button.callback("📤 أرسل المبلغ أولاً", "send_amount_cash")]
-        ])
-    );
+        Markup.inlineKeyboard([[Markup.button.callback("📤 أرسل المبلغ أولاً", "send_amount_cash")]]));
 });
 
-// -------------------- Await Amount for Stars --------------------
-bot.action("send_amount_stars", (ctx) => {
-    const id = ctx.from.id;
-    const s = getSession(id);
-    s.waitingForAmount = "stars";
-    return ctx.reply(`من فضلك أرسل عدد الاستارز الذي قمت بتحويله بالضبط:`);
-});
-
-// -------------------- Await Amount for Cash --------------------
+// -------------------- Await Amount Input --------------------
 bot.action("send_amount_cash", (ctx) => {
     const id = ctx.from.id;
     const s = getSession(id);
@@ -183,7 +147,7 @@ bot.action("send_amount_cash", (ctx) => {
     return ctx.reply(`من فضلك أرسل المبلغ الذي قمت بتحويله بالضبط بالـ EGP:`);
 });
 
-// -------------------- Handle Amount Input --------------------
+// -------------------- Handle Amount Text --------------------
 bot.on("text", (ctx) => {
     const id = ctx.from.id;
     const s = getSession(id);
@@ -204,7 +168,6 @@ bot.on("text", (ctx) => {
         }
     }
 
-    // تم التحقق من العدد أو المبلغ
     s.waitingForAmount = false;
     s.waitingForScreenshot = true;
     updateUserStatus(id, "awaiting_screenshot");
