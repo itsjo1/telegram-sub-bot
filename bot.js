@@ -1,7 +1,6 @@
 /*  ================================
         Telegram Subscription Bot
-        Final Full Version
-        With All Requested Features
+        Full Version with Verification
     ================================ */
 
 const { Telegraf, Markup } = require("telegraf");
@@ -13,7 +12,7 @@ const bot = new Telegraf(process.env.BOT_TOKEN);
 const prices = {
     group: {
         "1": { stars: 200, egp: 70 },
-        "6": { stars: 900, egp: 350 },
+        "6": { stars: 400, egp: 350 }, // تعديل حسب طلبك
         "12": { stars: 1500, egp: 600 }
     },
     live: {
@@ -26,6 +25,7 @@ const prices = {
 const vodafoneNumber = "01000000000";
 const supportLink = "https://t.me/remaigofvfkvro547gv";
 const starsUser = "@remaigofvfkvro547gv";
+const finalLink = "https://x.com/JDjdbhk82977";
 
 // user session data
 let sessions = {};
@@ -38,7 +38,6 @@ function getSession(id) {
 // -------------------- Start --------------------
 bot.start((ctx) => {
     sessions[ctx.from.id] = {}; // reset session
-
     return ctx.reply(
         "مرحباً! 👋\nمن فضلك اختر نوع الاشتراك:",
         Markup.inlineKeyboard([
@@ -104,21 +103,16 @@ bot.action("pay_stars", (ctx) => {
             ? prices.group[s.duration].stars
             : prices.live.stars;
 
+    s.expectedAmount = amount; // لتخزين العدد المتوقع للتحقق
+
     return ctx.editMessageText(
 `⭐ **الدفع عبر الاستارز**
 
-السعر: **${amount} ⭐**
+السعر المطلوب: **${amount} ⭐**
 
-من فضلك توجه إلى الجروب:
-${starsUser}
-
-ثم اضغط على صندوق الهدايا 🎁  
-وقم بإرسال العدد المطلوب على دفعات **100 / 100**  
-مثال: إذا كان المطلوب 200 استار → ابعت 100 مرتين.
-
-بعد التحويل، اضغط الزر بالأسفل وأرسل الاسكرين.`,
+من فضلك أولاً أرسل العدد الذي قمت بتحويله بالضبط، ثم سيتم طلب إرسال الاسكرين.`,
         Markup.inlineKeyboard([
-            [Markup.button.callback("📸 أرفق الاسكرين", "upload_ss")]
+            [Markup.button.callback("📤 أرسل العدد أولاً", "send_amount_stars")]
         ])
     );
 });
@@ -133,29 +127,60 @@ bot.action("pay_voda", (ctx) => {
             ? prices.group[s.duration].egp
             : prices.live.egp;
 
+    s.expectedAmount = egp; // لتخزين المبلغ المتوقع للتحقق
+
     return ctx.editMessageText(
 `💵 **الدفع عبر فودافون كاش**
 
-السعر: **${egp} جنيه مصري**
+السعر المطلوب: **${egp} جنيه مصري**
 
-من فضلك حوّل على الرقم التالي:
-📱 ${vodafoneNumber}
-
-ثم التقط Screenshot لعملية التحويل وارسلها.`,
+من فضلك أولاً أرسل المبلغ الذي قمت بتحويله بالضبط، ثم سيتم طلب إرسال الاسكرين.`,
         Markup.inlineKeyboard([
-            [Markup.button.callback("📸 أرفق الاسكرين", "upload_ss")]
+            [Markup.button.callback("📤 أرسل المبلغ أولاً", "send_amount_cash")]
         ])
     );
 });
 
-// -------------------- Upload Screenshot --------------------
-bot.action("upload_ss", (ctx) => {
+// -------------------- Await Amount for Stars --------------------
+bot.action("send_amount_stars", (ctx) => {
     const id = ctx.from.id;
     const s = getSession(id);
+    s.waitingForAmount = "stars";
+    return ctx.reply(`من فضلك أرسل عدد الاستارز الذي قمت بتحويله بالضبط:`);
+});
 
+// -------------------- Await Amount for Cash --------------------
+bot.action("send_amount_cash", (ctx) => {
+    const id = ctx.from.id;
+    const s = getSession(id);
+    s.waitingForAmount = "cash";
+    return ctx.reply(`من فضلك أرسل المبلغ الذي قمت بتحويله بالضبط بالـ EGP:`);
+});
+
+// -------------------- Handle Amount Input --------------------
+bot.on("text", (ctx) => {
+    const id = ctx.from.id;
+    const s = getSession(id);
+    if (!s.waitingForAmount) return;
+
+    const input = parseInt(ctx.message.text);
+    if (isNaN(input)) return ctx.reply("الرجاء إدخال رقم صحيح.");
+
+    if (s.waitingForAmount === "stars") {
+        if (input !== s.expectedAmount) {
+            return ctx.reply(`العدد الذي أرسلته غير مطابق. الرجاء إرسال العدد الصحيح: ${s.expectedAmount} ⭐`);
+        }
+    } else if (s.waitingForAmount === "cash") {
+        if (input !== s.expectedAmount) {
+            return ctx.reply(`المبلغ الذي أرسلته غير مطابق. الرجاء إرسال المبلغ الصحيح: ${s.expectedAmount} جنيه`);
+        }
+    }
+
+    // تم التحقق من العدد أو المبلغ
+    s.waitingForAmount = false;
     s.waitingForScreenshot = true;
 
-    return ctx.reply("من فضلك قم بإرسال الاسكرين الآن 📸");
+    return ctx.reply("✅ تم التحقق بنجاح، الآن من فضلك أرسل اسكرين عملية الدفع.");
 });
 
 // -------------------- Handle Screenshot --------------------
@@ -169,8 +194,8 @@ bot.on("photo", async (ctx) => {
 
     await ctx.reply("جاري التحقق من الاسكرين… ⏳");
 
-    // هنا فقط يتم الاستلام – لا يوجد تحليل حقيقي للصور حفاظاً على سياسة الاستخدام
-    await ctx.reply("تم استلام الاسكرين وسيتم التفعيل خلال دقائق ✅");
+    // هنا فقط يتم الاستلام – لا يوجد تحليل حقيقي للصور
+    await ctx.reply(`تم استلام الاسكرين وسيتم التفعيل خلال دقائق ✅\nتفضل الجروب الخاص: ${finalLink}\nشكرًا للاشتراك معنا!`);
 });
 
 // -------------------- Live Subscription --------------------
