@@ -1,4 +1,3 @@
-
 const { Telegraf, Markup } = require('telegraf');
 const express = require('express');
 const multer = require('multer');
@@ -148,5 +147,4 @@ bot.launch();
 console.log('Bot started');
 
 process.once('SIGINT',()=>{ bot.stop('SIGINT'); exiftool.end(); process.exit(); });
-
 process.once('SIGTERM',()=>{ bot.stop('SIGTERM'); exiftool.end(); process.exit(); });
