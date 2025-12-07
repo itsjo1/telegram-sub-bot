@@ -1,7 +1,7 @@
 /*  ================================
         Telegram Subscription Bot
         Full Version with JSON Database Tracking
-        Stars Workflow Updated with Split Gifts Instruction
+        Stars Workflow + Offers 24h Auto
         Vodafone Cash Number: 01009446202
     ================================ */
 
@@ -12,7 +12,7 @@ require("dotenv").config();
 const bot = new Telegraf(process.env.BOT_TOKEN);
 
 // -------------------- Prices --------------------
-const prices = {
+let prices = {
     group: { "1": { stars: 200, egp: 70 }, "6": { stars: 400, egp: 350 }, "12": { stars: 1500, egp: 600 } },
     live: { stars: 2000, egp: 700, usd: 20 }
 };
@@ -21,6 +21,12 @@ const vodafoneNumber = "01009446202";
 const supportLink = "https://t.me/remaigofvfkvro547gv";
 const starsUser = "@remaigofvfkvro547gv";
 const finalLink = "https://x.com/JDjdbhk82977";
+
+// -------------------- Offer Configuration --------------------
+let offerActive = true; // true يعني العرض شغال
+const offerDurationMs = 24 * 60 * 60 * 1000; // 24 ساعة
+const offerPrices = { stars: 100, egp: 100, usd: 1 };
+const offerDuration = "6"; // 6 شهور فقط خلال العرض
 
 // -------------------- JSON Database --------------------
 const DB_FILE = "./db.json";
@@ -60,19 +66,44 @@ bot.action("group_sub", (ctx) => {
     session.type = "group";
     saveUser(id, { userId: id, username: ctx.from.username, type: "group" });
 
-    return ctx.editMessageText(
-        "من فضلك اختر مدة الاشتراك:",
-        Markup.inlineKeyboard([
+    let buttons = [];
+    if (offerActive) {
+        // خلال العرض: مدة 6 شهور فقط
+        buttons = [[Markup.button.callback("6 شهور (عرض خاص!)", "group_offer")]];
+    } else {
+        buttons = [
             [
                 Markup.button.callback("1 شهر", "group_1"),
                 Markup.button.callback("6 شهور", "group_6"),
                 Markup.button.callback("12 شهر", "group_12")
             ]
+        ];
+    }
+
+    return ctx.editMessageText(
+        "من فضلك اختر مدة الاشتراك:",
+        Markup.inlineKeyboard(buttons)
+    );
+});
+
+// -------------------- Offer Button --------------------
+bot.action("group_offer", (ctx) => {
+    const id = ctx.from.id;
+    const session = getSession(id);
+    session.duration = offerDuration;
+    session.isOffer = true;
+    saveUser(id, { duration: offerDuration, isOffer: true });
+
+    return ctx.editMessageText(
+        `🔥 عرض خاص لمدة 24 ساعة 🔥\nمدة الاشتراك: 6 شهور\nالسعر:\n⭐ ${offerPrices.stars} ⭐\n💵 ${offerPrices.egp} جنيه\n💲 ${offerPrices.usd} دولار\n\nاختر طريقة الدفع:`,
+        Markup.inlineKeyboard([
+            [Markup.button.callback("⭐ Stars", "pay_stars_offer")],
+            [Markup.button.callback("💵 Vodafone Cash", "pay_voda_offer")]
         ])
     );
 });
 
-// -------------------- Duration Selection --------------------
+// -------------------- Duration Selection Normal --------------------
 ["1", "6", "12"].forEach((m) => {
     bot.action(`group_${m}`, (ctx) => {
         const id = ctx.from.id;
@@ -89,11 +120,10 @@ bot.action("group_sub", (ctx) => {
     });
 });
 
-// -------------------- Stars Payment --------------------
+// -------------------- Stars Payment Normal --------------------
 bot.action("pay_stars", (ctx) => {
     const id = ctx.from.id;
     const s = getSession(id);
-
     let amount = s.type === "group" ? prices.group[s.duration].stars : prices.live.stars;
     s.expectedAmount = amount;
     saveUser(id, { method: "stars", expectedAmount: amount, status: "awaiting_click" });
@@ -110,6 +140,19 @@ bot.action("pay_stars", (ctx) => {
         Markup.inlineKeyboard([[Markup.button.callback("✅ تم التحويل أولاً", "click_done")]]));
 });
 
+// -------------------- Stars Payment Offer --------------------
+bot.action("pay_stars_offer", (ctx) => {
+    const id = ctx.from.id;
+    const s = getSession(id);
+    s.expectedAmount = offerPrices.stars;
+    s.isOffer = true;
+    saveUser(id, { method: "stars", expectedAmount: offerPrices.stars, isOffer: true, status: "awaiting_click" });
+
+    return ctx.editMessageText(
+        `⭐ **عرض خاص - الدفع عبر الاستارز**\n\nالرجاء تحويل الاستارز على الجروب: ${starsUser}\n⚠️ أرسل 100 ⭐ في كل مرة على دفعات حتى تكتمل الـ ${offerPrices.stars} ⭐.\n\nبعد ذلك اضغط على الزر بالأسفل عند الانتهاء من التحويل.`,
+        Markup.inlineKeyboard([[Markup.button.callback("✅ تم التحويل أولاً", "click_done")]]));
+});
+
 // -------------------- Click Done for Stars --------------------
 bot.action("click_done", (ctx) => {
     const id = ctx.from.id;
@@ -119,11 +162,10 @@ bot.action("click_done", (ctx) => {
     return ctx.reply(`الآن من فضلك أرسل عدد الاستارز الذي قمت بتحويله بالضبط:`);
 });
 
-// -------------------- Vodafone Cash Payment --------------------
+// -------------------- Vodafone Cash Payment Normal --------------------
 bot.action("pay_voda", (ctx) => {
     const id = ctx.from.id;
     const s = getSession(id);
-
     let egp = s.type === "group" ? prices.group[s.duration].egp : prices.live.egp;
     s.expectedAmount = egp;
     saveUser(id, { method: "vodafone", expectedAmount: egp, status: "awaiting_amount" });
@@ -132,6 +174,25 @@ bot.action("pay_voda", (ctx) => {
 `💵 **الدفع عبر فودافون كاش**
 
 السعر المطلوب: **${egp} جنيه مصري**
+
+من فضلك أولاً أرسل المبلغ الذي قمت بتحويله بالضبط، ثم سيتم طلب إرسال الاسكرين.
+
+رقم التحويل: 📱 ${vodafoneNumber}`,
+        Markup.inlineKeyboard([[Markup.button.callback("📤 أرسل المبلغ أولاً", "send_amount_cash")]]));
+});
+
+// -------------------- Vodafone Cash Payment Offer --------------------
+bot.action("pay_voda_offer", (ctx) => {
+    const id = ctx.from.id;
+    const s = getSession(id);
+    s.expectedAmount = offerPrices.egp;
+    s.isOffer = true;
+    saveUser(id, { method: "vodafone", expectedAmount: offerPrices.egp, isOffer: true, status: "awaiting_amount" });
+
+    return ctx.editMessageText(
+`💵 **عرض خاص - الدفع عبر فودافون كاش**
+
+السعر المطلوب: **${offerPrices.egp} جنيه مصري**
 
 من فضلك أولاً أرسل المبلغ الذي قمت بتحويله بالضبط، ثم سيتم طلب إرسال الاسكرين.
 
@@ -156,16 +217,11 @@ bot.on("text", (ctx) => {
     const input = parseInt(ctx.message.text);
     if (isNaN(input)) return ctx.reply("الرجاء إدخال رقم صحيح.");
 
-    if (s.waitingForAmount === "stars") {
-        if (input !== s.expectedAmount) {
-            updateUserStatus(id, "wrong_amount");
-            return ctx.reply(`العدد الذي أرسلته غير مطابق. الرجاء إرسال العدد الصحيح: ${s.expectedAmount} ⭐`);
-        }
-    } else if (s.waitingForAmount === "cash") {
-        if (input !== s.expectedAmount) {
-            updateUserStatus(id, "wrong_amount");
-            return ctx.reply(`المبلغ الذي أرسلته غير مطابق. الرجاء إرسال المبلغ الصحيح: ${s.expectedAmount} جنيه`);
-        }
+    let expected = s.isOffer ? (s.method === "stars" ? offerPrices.stars : offerPrices.egp) : s.expectedAmount;
+
+    if (input !== expected) {
+        updateUserStatus(id, "wrong_amount");
+        return ctx.reply(`المبلغ/عدد الذي أرسلته غير مطابق. الرجاء إرسال العدد الصحيح: ${expected}`);
     }
 
     s.waitingForAmount = false;
@@ -206,6 +262,14 @@ bot.action("live_sub", (ctx) => {
         ])
     );
 });
+
+// -------------------- Auto-End Offer After 24h --------------------
+if (offerActive) {
+    setTimeout(() => {
+        offerActive = false;
+        console.log("عرض الاشتراك انتهى، الأسعار عادت للطبيعي.");
+    }, offerDurationMs);
+}
 
 bot.launch();
 console.log("Bot is running...");
