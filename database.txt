@@ -1,0 +1,2 @@
+database/
+  bot.sqlite  <-- سيتم إنشاؤه تلقائيًا

@@ -1,0 +1,27 @@
+{
+  "name": "telegram-subscription-bot",
+  "version": "1.0.0",
+  "description": "Telegram Subscription & Delivery Bot (Arabic / English)",
+  "main": "bot.js",
+  "scripts": {
+    "start": "node bot.js"
+  },
+  "dependencies": {
+    "crypto": "^1.0.1",
+    "dotenv": "^17.2.3",
+    "ejs": "^3.1.10",
+    "exiftool-vendored": "^17.1.0",
+    "express": "^4.22.1",
+    "multer": "^1.4.5-lts.1",
+    "node-fetch": "^2.7.0",
+    "sequelize": "^6.37.7",
+    "sharp": "^0.32.6",
+    "sqlite3": "^5.1.7",
+    "telegraf": "^4.16.3",
+    "tesseract.js": "^4.1.4"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs"
+}

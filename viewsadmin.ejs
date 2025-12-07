@@ -1,0 +1,56 @@
+!DOCTYPE html
+html lang=ar
+head
+  meta charset=UTF-8
+  titleلوحة التحكم - Admin Dashboardtitle
+  link rel=stylesheet href=style.css
+head
+body
+  h2لوحة التحكمh2
+  p
+    المجموع %= counts.total %  
+    قيد المراجعة %= counts.pending %  
+    تم التحقق %= counts.verified %  
+    تم التسليم %= counts.delivered %  
+    مشبوه %= counts.flagged %  
+    طلبات الدعم %= counts.support %
+  p
+
+  table border=1 cellpadding=6
+    tr
+      thIDth
+      thالمستخدمth
+      thالخطةth
+      thالنوعth
+      thالسعرth
+      thالحالةth
+      thمشبوهth
+      thإثبات الدفعth
+      thإجراءاتth
+    tr
+    % subs.forEach(s = { %
+      tr
+        td%= s.id %td
+        td@%= s.username % (%= s.telegramId %)td
+        td%= s.planMonths % شهرtd
+        td%= s.planType %td
+        td%= s.price %td
+        td%= s.status %td
+        td%= s.flagged %td
+        td
+          % if(s.proofPath){ %
+            a href=%= s.proofPath.replace(__dirname+'', '') %عرضa
+          % } %
+        td
+        td
+          form method=post action=adminverify
+            input type=hidden name=token value=%= process.env.ADMIN_CHAT_ID %
+            input type=hidden name=id value=%= s.id %
+            button type=submitتفعيل وتسليمbutton
+          form
+        td
+      tr
+    % }) %
+  table
+body
+html
