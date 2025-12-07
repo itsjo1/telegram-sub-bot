@@ -1,164 +1,204 @@
-/*  ================================
-        Telegram Subscription Bot
-        Final Full Version
-        With All Requested Features
-    ================================ */
+//////////////////////  ▬▬▬ BOT CONFIG ▬▬▬  //////////////////////
 
-const { Telegraf, Markup } = require("telegraf");
-require("dotenv").config();
+import dotenv from "dotenv";
+dotenv.config();
+import { Telegraf, Markup } from "telegraf";
 
-const bot = new Telegraf(process.env.BOT_TOKEN);
+const BOT_TOKEN = process.env.BOT_TOKEN;
+const ADMIN_CHAT_ID = process.env.ADMIN_CHAT_ID || "";
+const VODAFONE_NUMBER = process.env.VODAFONE_NUMBER || "";
+const SUPPORT_LINK = "https://t.me/remaigofvfkvro547gv";
+const STAR_USER = "@remaigofvfkvro547gv";
 
-// -------------------- Prices --------------------
-const prices = {
-    group: {
-        "1": { stars: 200, egp: 70 },
-        "6": { stars: 900, egp: 350 },
-        "12": { stars: 1500, egp: 600 }
-    },
-    live: {
-        stars: 2000,
-        egp: 700,
-        usd: 20
-    }
-};
+if (!BOT_TOKEN) {
+    console.error("❌ BOT_TOKEN missing");
+    process.exit(1);
+}
 
-const vodafoneNumber = "01000000000";
-const supportLink = "https://t.me/remaigofvfkvro547gv";
-const starsUser = "@remaigofvfkvro547gv";
+const bot = new Telegraf(BOT_TOKEN);
 
-// user session data
-let sessions = {};
+///////////////////////////////////////////////////////////////
+// جلسات المستخدمين
+///////////////////////////////////////////////////////////////
 
+const sessions = {};
 function getSession(id) {
-    if (!sessions[id]) sessions[id] = {};
+    if (!sessions[id]) {
+        sessions[id] = {
+            step: "",
+            type: "",
+            duration: "",
+            method: "",
+            waitingForScreenshot: false,
+            waitingForTransferCount: false
+        };
+    }
     return sessions[id];
 }
 
-// -------------------- Start --------------------
+///////////////////////////////////////////////////////////////
+// قائمة الأسعار
+///////////////////////////////////////////////////////////////
+
+const prices = {
+    group: {
+        "1m": { stars: 200, dollar: 2, egp: 150, transfers: 2 },
+        "6m": { stars: 400, dollar: 4, egp: 250, transfers: 4 },
+        "12m": { stars: 700, dollar: 7, egp: 350, transfers: 7 }
+    },
+    live: {
+        "1live": { stars: 2000, dollar: 20, egp: 700, transfers: 20 }
+    }
+};
+
+///////////////////////////////////////////////////////////////
+// واجهة البداية
+///////////////////////////////////////////////////////////////
+
 bot.start((ctx) => {
-    sessions[ctx.from.id] = {}; // reset session
-
-    return ctx.reply(
-        "مرحباً! 👋\nمن فضلك اختر نوع الاشتراك:",
-        Markup.inlineKeyboard([
-            [Markup.button.callback("اشتراك الجروب", "group_sub")],
-            [Markup.button.callback("اشتراك الايف", "live_sub")],
-            [Markup.button.callback("الدعم الفني", "support")]
-        ])
-    );
-});
-
-// -------------------- Support --------------------
-bot.action("support", (ctx) => {
-    return ctx.editMessageText(
-        `من فضلك تواصل مع الدعم على الجروب التالي:\n${supportLink}\n\nسيتم الرد عليك في أسرع وقت ممكن.`,
-        Markup.inlineKeyboard([
-            [Markup.button.url("فتح جروب الدعم", supportLink)]
-        ])
-    );
-});
-
-// -------------------- Group Subscription --------------------
-bot.action("group_sub", (ctx) => {
     const id = ctx.from.id;
-    const session = getSession(id);
-    session.type = "group";
+    sessions[id] = {}; // reset
 
-    return ctx.editMessageText(
-        "من فضلك اختر مدة الاشتراك:",
+    ctx.reply(
+        "مرحباً 👋\nاختر نوع الاشتراك:",
+        Markup.keyboard([
+            ["🔷 اشتراك الجروب", "🔴 اشتراك اللايف"],
+            ["💬 الدعم", "🎁 العروض المتاحة"]
+        ]).resize()
+    );
+});
+
+///////////////////////////////////////////////////////////////
+// الدعم
+///////////////////////////////////////////////////////////////
+
+bot.hears("💬 الدعم", (ctx) => {
+    ctx.reply(
+        `من فضلك تواصل مع الدعم عبر الجروب التالي:\n${SUPPORT_LINK}\nوسيتم الرد عليك في أسرع وقت.`
+    );
+});
+
+///////////////////////////////////////////////////////////////
+// العروض
+///////////////////////////////////////////////////////////////
+
+bot.hears("🎁 العروض المتاحة", (ctx) => {
+    ctx.reply("حالياً لا توجد عروض متاحة.\nسيتم إضافة العروض قريباً.");
+});
+
+///////////////////////////////////////////////////////////////
+// اشتراك الجروب
+///////////////////////////////////////////////////////////////
+
+bot.hears("🔷 اشتراك الجروب", (ctx) => {
+    const s = getSession(ctx.from.id);
+    s.type = "group";
+
+    ctx.reply(
+        "اختر مدة الاشتراك:",
         Markup.inlineKeyboard([
-            [
-                Markup.button.callback("1 شهر", "group_1"),
-                Markup.button.callback("6 شهور", "group_6"),
-                Markup.button.callback("12 شهر", "group_12")
-            ]
+            [Markup.button.callback("1 شهر", "dur_1m")],
+            [Markup.button.callback("6 شهور", "dur_6m")],
+            [Markup.button.callback("12 شهر", "dur_12m")]
         ])
     );
 });
 
-// -------------------- Duration Selection --------------------
-["1", "6", "12"].forEach((m) => {
-    bot.action(`group_${m}`, (ctx) => {
-        const id = ctx.from.id;
-        const session = getSession(id);
-        session.duration = m;
+///////////////////////////////////////////////////////////////
+// اشتراك اللايف
+///////////////////////////////////////////////////////////////
 
-        return ctx.editMessageText(
-            `مدة الاشتراك: ${m} شهر\n\nاختر طريقة الدفع:`,
-            Markup.inlineKeyboard([
-                [Markup.button.callback("⭐ Stars", "pay_stars")],
-                [Markup.button.callback("💵 Vodafone Cash", "pay_voda")]
-            ])
-        );
-    });
-});
+bot.hears("🔴 اشتراك اللايف", (ctx) => {
+    const s = getSession(ctx.from.id);
+    s.type = "live";
 
-// -------------------- Pay with Stars --------------------
-bot.action("pay_stars", (ctx) => {
-    const id = ctx.from.id;
-    const s = getSession(id);
-
-    let amount =
-        s.type === "group"
-            ? prices.group[s.duration].stars
-            : prices.live.stars;
-
-    return ctx.editMessageText(
-`⭐ **الدفع عبر الاستارز**
-
-السعر: **${amount} ⭐**
-
-من فضلك توجه إلى الجروب:
-${starsUser}
-
-ثم اضغط على صندوق الهدايا 🎁  
-وقم بإرسال العدد المطلوب على دفعات **100 / 100**  
-مثال: إذا كان المطلوب 200 استار → ابعت 100 مرتين.
-
-بعد التحويل، اضغط الزر بالأسفل وأرسل الاسكرين.`,
+    ctx.reply(
+        "اشتراك اللايف:\nاختر:",
         Markup.inlineKeyboard([
-            [Markup.button.callback("📸 أرفق الاسكرين", "upload_ss")]
+            [Markup.button.callback("لايف واحد", "dur_live")]
         ])
     );
 });
 
-// -------------------- Pay with Vodafone Cash --------------------
-bot.action("pay_voda", (ctx) => {
+///////////////////////////////////////////////////////////////
+// اختيار المدة
+///////////////////////////////////////////////////////////////
+
+bot.action(/dur_(.+)/, async (ctx) => {
+    const duration = ctx.match[1];
     const id = ctx.from.id;
     const s = getSession(id);
 
-    let egp =
-        s.type === "group"
-            ? prices.group[s.duration].egp
-            : prices.live.egp;
+    s.duration = duration;
 
-    return ctx.editMessageText(
-`💵 **الدفع عبر فودافون كاش**
+    await ctx.answerCbQuery();
 
-السعر: **${egp} جنيه مصري**
-
-من فضلك حوّل على الرقم التالي:
-📱 ${vodafoneNumber}
-
-ثم التقط Screenshot لعملية التحويل وارسلها.`,
+    // اطلب طريقة الدفع
+    ctx.reply(
+        "اختر طريقة الدفع:",
         Markup.inlineKeyboard([
-            [Markup.button.callback("📸 أرفق الاسكرين", "upload_ss")]
+            [Markup.button.callback("💠 الدفع بالستارز", "pay_star")],
+            [Markup.button.callback("💳 فودافون كاش", "pay_voda")]
         ])
     );
 });
 
-// -------------------- Upload Screenshot --------------------
-bot.action("upload_ss", (ctx) => {
+///////////////////////////////////////////////////////////////
+// الدفع بالستارز
+///////////////////////////////////////////////////////////////
+
+bot.action("pay_star", async (ctx) => {
     const id = ctx.from.id;
     const s = getSession(id);
+
+    s.method = "stars";
+
+    const p = prices[s.type][s.duration];
+
+    ctx.reply(
+        `💰 السعر المطلوب:\n` +
+        `⭐ ${p.stars} ستارز\n` +
+        `💵 ${p.dollar} دولار\n\n` +
+        `يرجى إرسال عدد التحويلات المطلوبة:\n` +
+        `قم بالدخول إلى الجروب → ${STAR_USER}\n` +
+        `واضغط على صندوق الهدايا ثم حول 100 ستار في كل عملية.\n` +
+        `عدد العمليات المطلوبة: ${p.transfers}\n\n` +
+        `بعد التحويل، قم بإرسال لقطة الشاشة.`,
+    );
 
     s.waitingForScreenshot = true;
 
-    return ctx.reply("من فضلك قم بإرسال الاسكرين الآن 📸");
+    await ctx.answerCbQuery();
 });
 
-// -------------------- Handle Screenshot --------------------
+///////////////////////////////////////////////////////////////
+// الدفع فودافون كاش
+///////////////////////////////////////////////////////////////
+
+bot.action("pay_voda", async (ctx) => {
+    const id = ctx.from.id;
+    const s = getSession(id);
+
+    s.method = "voda";
+
+    const p = prices[s.type][s.duration];
+
+    await ctx.answerCbQuery();
+
+    ctx.reply(
+        `💰 السعر المطلوب:\n` +
+        `💵 ${p.egp} جنيه مصري\n\n` +
+        `من فضلك قم بالتحويل على هذا الرقم:\n📱 ${VODAFONE_NUMBER}\n\n` +
+        `بعد التحويل أرفق لقطة الشاشة هنا.`,
+    );
+
+    s.waitingForScreenshot = true;
+});
+
+///////////////////////////////////////////////////////////////
+// استلام الاسكرين
+///////////////////////////////////////////////////////////////
+
 bot.on("photo", async (ctx) => {
     const id = ctx.from.id;
     const s = getSession(id);
@@ -166,27 +206,48 @@ bot.on("photo", async (ctx) => {
     if (!s.waitingForScreenshot) return;
 
     s.waitingForScreenshot = false;
+    s.waitingForTransferCount = true;
 
-    await ctx.reply("جاري التحقق من الاسكرين… ⏳");
-
-    // هنا فقط يتم الاستلام – لا يوجد تحليل حقيقي للصور حفاظاً على سياسة الاستخدام
-    await ctx.reply("تم استلام الاسكرين وسيتم التفعيل خلال دقائق ✅");
-});
-
-// -------------------- Live Subscription --------------------
-bot.action("live_sub", (ctx) => {
-    const id = ctx.from.id;
-    const s = getSession(id);
-    s.type = "live";
-
-    return ctx.editMessageText(
-        "سعر الايف الواحد:\n\n⭐ 2000 استار\n💵 700 جنيه مصري\n💲 20 دولار\n\nاختر طريقة الدفع:",
-        Markup.inlineKeyboard([
-            [Markup.button.callback("⭐ Stars", "pay_stars")],
-            [Markup.button.callback("💵 Vodafone Cash", "pay_voda")]
-        ])
+    ctx.reply(
+        "تم استلام لقطة الشاشة.\n\n" +
+        "من فضلك اكتب عدد مرات إرسال 100 ستار التي قمت بها."
     );
 });
 
+///////////////////////////////////////////////////////////////
+// التحقق من عدد التحويلات
+///////////////////////////////////////////////////////////////
+
+bot.on("text", async (ctx) => {
+    const id = ctx.from.id;
+    const s = getSession(id);
+
+    if (!s.waitingForTransferCount) return;
+
+    const userCount = parseInt(ctx.message.text);
+    if (isNaN(userCount)) {
+        return ctx.reply("من فضلك اكتب رقم صحيح.");
+    }
+
+    const required = prices[s.type][s.duration].transfers;
+
+    if (userCount !== required) {
+        return ctx.reply(
+            `❌ عدد التحويلات غير مطابق.\n` +
+            `المطلوب: ${required} مرات × 100 ستار.\n` +
+            `اللي انت كتبته: ${userCount}\n\n` +
+            `لو سمحت تأكد من عدد عمليات إرسال 100 ستار.`
+        );
+    }
+
+    s.waitingForTransferCount = false;
+
+    ctx.reply("✔ تم التحقق من التحويل.\nسيتم التفعيل خلال دقائق.");
+});
+
+///////////////////////////////////////////////////////////////
+// تشغيل البوت
+///////////////////////////////////////////////////////////////
+
 bot.launch();
-console.log("Bot is running...");
+console.log("Bot started");
