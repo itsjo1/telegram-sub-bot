@@ -1,7 +1,7 @@
 /*  ================================
         Telegram Subscription Bot
         Full Version with JSON Database Tracking
-        Stars Workflow Updated
+        Stars Workflow Updated with Split Gifts Instruction
         Vodafone Cash Number: 01009446202
     ================================ */
 
@@ -104,7 +104,7 @@ bot.action("pay_stars", (ctx) => {
 الرجاء تحويل الاستارز على الجروب: ${starsUser}  
 لو مش عارف كيف، ادخل الجروب، ستجد صندوق هدايا أسفل اليمين أو اليسار، اضغط عليه وأرسل الهدية، ثم خذ اسكرين.
 
-السعر المطلوب: **${amount} ⭐**
+⚠️ **مهم:** لا ترسل كل الاستارز في جيفت واحد، بل أرسل 100 ⭐ في كل مرة على دفعات حتى يكتمل المجموع المطلوب (${amount} ⭐).
 
 بعد ذلك اضغط على الزر بالأسفل عند الانتهاء من التحويل.`,
         Markup.inlineKeyboard([[Markup.button.callback("✅ تم التحويل أولاً", "click_done")]]));
